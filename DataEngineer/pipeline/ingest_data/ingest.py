@@ -1,49 +1,70 @@
-import pandas as pd
-import numpy as np
+import hashlib
+import os
+import re
+import unicodedata
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime
-#Example Data#
-    #176_สะพานลอยหน้าสวนจตุจักร-ถนนพ_รถมาจากแยกลาดพร้าว-มุ่งหน้า_20260830_104618#
+import imagesize
+import pandas as pd
 
-base_dir = Path('raw_data/cctv_images')
-valid_ext = {'.jpg', '.jpeg', '.png'}
+BASE_PATH = Path('raw_data/cctv_images')
+OUT_PATH = Path('DataEngineer/bronze_data/manifest.parquet')
+VALID_FILE = {'.jpg', '.jpeg', '.png'}
+TZ = "Asia/Bangkok"
+RUN_ID = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-store = []
+NAME_FORMAT = re.compile(
+    r"(?P<camera_id>[^_]+)_(?P<camera_name>.+)_(?P<date>\d{8})_(?P<time>\d{6})"
+)
 
-for file_path in base_dir.rglob('*') :
-    if not (file_path.is_file() and file_path.suffix.lower() in valid_ext):
-        continue
+def process(path : Path) -> dict :
 
-    spilt_variable = file_path.name.split('_')
-    cam_id = spilt_variable[0]
-    filename = str(file_path.name)
-    path = str(file_path)
-    datestamp = datetime.strptime(f"{spilt_variable[3]}_{spilt_variable[4].split('.')[0]}",'%Y%m%d_%H%M%S')
+    rel = path.relative_to(BASE_PATH)
+    size_image = path.stat()
+    stem = path.stem
+    m = NAME_FORMAT.fullmatch(stem)
+
+    width , height = imagesize.get(path)
+
+
+    return {
+        "image_id": hashlib.md5(rel.as_posix().encode("utf-8")).hexdigest()[:16], # create id
+        "camera_id": m["camera_id"] if m else None, # camera id
+        "camera_name": m["camera_name"] if m else None, # same as camera id
+        "filename": path.name,  # original file name
+        "rel_path": rel.as_posix(), # path of file
+        "ext": path.suffix.lower(), # .type of files
+        "file_size_bytes": size_image.st_size, # bytes of files
+        "width": width, # width
+        "height": height, # hight
+        "ts_filename_raw": f"{m['date']}{m['time']}" if m else None, #date that appears in the filename
+        "run_id": RUN_ID, # run id date of doing pipeline
+    }
+
+def main() -> None:
+
+    files = [p for p in BASE_PATH.rglob("*")
+             if p.is_file() and p.suffix.lower() in VALID_FILE]
+    print(f"found {len(files):,} image files")
+
+    rows = list(map(process, files))
+    df = pd.DataFrame(rows)
+
+    df["ingested_at"] = pd.Timestamp.now(tz="UTC")
+    df = df.astype({
+        "camera_id": "string", "camera_name": "string","width": "int32", "height": "int32", "file_size_bytes": "int64",
+        "ext": "category",
+    })
+    df = df.sort_values(["camera_id", "ts_filename"]).reset_index(drop=True)
+
+    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = OUT_PATH.with_suffix(".parquet.tmp")
+    df.to_parquet(tmp, engine="pyarrow", index=False)
+    os.replace(tmp, OUT_PATH)
+    print(f"wrote {len(df):,} rows -> {OUT_PATH}")
+
     
+if __name__ == "__main__":
+    main()
     
-    store.append({
-        "camera_id" : cam_id,
-        "Date_time" : datestamp,
-        "filename" : filename,
-        "path" : path
-
-        })
-
-
-
-df = pd.DataFrame(store)
-
-df['Hour'] = df['Date_time'].dt.hour
-df['minute'] = df['Date_time'].dt.minute
-df['dayofweek']= df['Date_time'].dt.dayofweek
-df['date'] = df['Date_time'].dt.date
-
-print(df.head())
-print(df['Date_time'])
-
-
-#download
-#df.to_parquet('ingest_data.parquet', index=False)
-
-
-## add resolution[width , height] , file_size , 
