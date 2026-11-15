@@ -7,7 +7,7 @@ import requests
 
 
 def collect_bem():
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = Path(__file__).resolve().parent.parent.parent
     output_dir = project_dir / "data" / "external_data" / "raw" / "bem"
     html_path = output_dir / "traffic_volume.html"
     csv_path = output_dir / "traffic_volume_raw.csv"

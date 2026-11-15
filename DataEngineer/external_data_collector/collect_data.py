@@ -5,7 +5,7 @@ import requests
 
 
 def collect_weather(latitude, longitude, start_date, end_date):
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = Path(__file__).resolve().parent.parent.parent
     external_data_dir = project_dir / "data" / "external_data"
     filename = f"weather_{latitude}_{longitude}_{start_date}_{end_date}"
     raw_path = external_data_dir / "raw" / "weather" / f"{filename}.json"

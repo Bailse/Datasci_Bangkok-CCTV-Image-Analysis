@@ -6,7 +6,7 @@ import requests
 
 
 def collect_holidays():
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = Path(__file__).resolve().parent.parent.parent
     raw_path = (
         project_dir / "data" / "external_data" / "raw" / "holidays"
         / "thailand_public_holidays_2026.json"
