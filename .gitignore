@@ -1,3 +1,6 @@
 raw_data/cctv_images
+data/bronze_data
+data/gold
+data/silver_data
 test/*
 .vscode/*
