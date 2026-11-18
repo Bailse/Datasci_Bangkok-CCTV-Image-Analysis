@@ -9,7 +9,7 @@ import imagesize
 import pandas as pd
 
 BASE_PATH = Path('raw_data/cctv_images')
-OUT_PATH = Path('DataEngineer/bronze_data/manifest.parquet')
+OUT_PATH = Path('data/bronze_data/manifest.parquet')
 VALID_FILE = {'.jpg', '.jpeg', '.png'}
 TZ = "Asia/Bangkok"
 RUN_ID = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -56,7 +56,8 @@ def main() -> None:
         "camera_id": "string", "camera_name": "string","width": "int32", "height": "int32", "file_size_bytes": "int64",
         "ext": "category",
     })
-    df = df.sort_values(["camera_id", "ts_filename"]).reset_index(drop=True)
+    
+    df = df.sort_values(["camera_id", "ts_filename_raw"]).reset_index(drop=True)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = OUT_PATH.with_suffix(".parquet.tmp")

@@ -4,3 +4,5 @@ data/gold
 data/silver_data
 test/*
 .vscode/*
+__pycache__/
+Bombaclat/

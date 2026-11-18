@@ -64,6 +64,9 @@ def silver_flow(shard: int = 0, n_shards: int = 1,
 
     manifest = pd.read_parquet(cfg.BRONZE_MANIFEST)
     manifest["camera_id"] = manifest.camera_id.astype(str)
+    manifest["ts_filename"] = pd.to_datetime(                   # bronze keeps raw string; parse here
+        manifest.ts_filename_raw, format="%Y%m%d%H%M%S"
+    ).dt.tz_localize("Asia/Bangkok")
 
     all_cams = sorted(manifest.camera_id.unique())
     if cameras:
