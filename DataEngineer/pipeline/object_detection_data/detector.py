@@ -45,7 +45,7 @@ def detect_camera(camera_id: str, files: list[tuple[str, str, object]]) -> pd.Da
 
         if not imgs:
             continue
-        results = model.predict(imgs, conf=cfg.CONF, imgsz=cfg.IMGSZ,
+        results = model.predict(imgs, conf=cfg.CONF, iou=cfg.IOU, imgsz=cfg.IMGSZ,
                                 classes=class_ids, verbose=False)
         for (fname, ts_filename, bright), res in zip(meta, results):
             counts = Counter(id_to_name[int(c)] for c in res.boxes.cls)

@@ -1,0 +1,20 @@
+COUNTING RULES (follow exactly, so everyone counts the same way)
+
+Columns to fill: car, motorcycle, heavy   (whole numbers, 0 if none)
+
+car        = sedan, SUV, van, pickup, taxi, songthaew (pickup with seats)
+motorcycle = motorcycle / scooter. Rider + bike = 1 motorcycle. Tuk-tuk = motorcycle.
+heavy      = bus, minibus, 6-wheel+ truck, trailer
+
+Count a vehicle when:
+  - it is on the road or road shoulder, moving OR parked
+  - at least half of it is visible (cut at the image edge -> count only if >= half)
+  - you can tell it is a vehicle, even if far away
+Do NOT count:
+  - vehicles too small/blurry to tell they are vehicles (just a light or a few pixels)
+  - reflections, vehicles on billboards/screens
+  - bicycles, people
+
+If an image is unusable (black, frozen, camera covered), put 1 in "skip" and leave counts empty.
+Unsure about something? Write it in "note" instead of guessing silently.
+Zoom in: images are only 352x288.

@@ -6,3 +6,9 @@ test/*
 .vscode/*
 __pycache__/
 Bombaclat/
+
+*.pt
+DataSci/model_eval/_to_delete/
+DataSci/model_eval/predictions/
+DataSci/model_eval/count_set/images/
+DataSci/model_eval/comparison/**/*.jpg
