@@ -192,6 +192,129 @@ def clean_bem(csv_path, html_path):
     return monthly, annual
 
 
+def clean_accidents(raw_path):
+    columns = {
+        "ปีที่เกิดเหตุ": "accident_year",
+        "วันที่เกิดเหตุ": "accident_date_raw",
+        "เวลา": "accident_time_raw",
+        "วันที่รายงาน": "report_date_raw",
+        "เวลาที่รายงาน": "report_time_raw",
+        "หน่วยงาน": "agency",
+        "สายทางหน่วยงาน": "road_network",
+        "รหัสสายทาง": "route_code",
+        "สายทาง": "road_name",
+        "ก.ม.": "kilometer_marker",
+        "จังหวัด": "province",
+        "รถคันที่1": "first_vehicle_type",
+        "บริเวณที่เกิดเหตุ/ลักษณะทาง": "road_layout",
+        "บริเวณที่เกิดเหตุอื่น": "other_location_detail",
+        "มูลเหตุสันนิษฐาน": "suspected_cause",
+        "ลักษณะการเกิดอุบัติเหตุ": "accident_type",
+        "สภาพอากาศ": "weather",
+        "LATITUDE": "latitude",
+        "LONGITUDE": "longitude",
+        "จำนวนรถที่เกิดเหตุ(รวมคันที่1)": "vehicles_total",
+        "จำนวนที่เกิดเหตุทั้งหมด(รวมคนเดินเท้า)": "participants_total",
+        "รถจักรยานยนต์": "motorcycles",
+        "รถสามล้อเครื่อง": "motorized_three_wheelers",
+        "รถยนต์นั่งส่วนบุคคล/รถยนต์นั่งสาธารณะ": "passenger_cars",
+        "รถตู้": "vans",
+        "รถปิคอัพโดยสาร": "passenger_pickups",
+        "รถโดยสารมากกว่า4ล้อ": "buses_over_four_wheels",
+        "รถปิคอัพบรรทุก4ล้อ": "four_wheel_cargo_pickups",
+        "รถบรรทุก6ล้อ": "six_wheel_trucks",
+        "รถบรรทุกมากกว่า6ล้อไม่เกิน10ล้อ": "trucks_seven_to_ten_wheels",
+        "รถบรรทุกมากกว่า10ล้อ(รถพ่วง)": "trucks_over_ten_wheels",
+        "รถอีแต๋น": "e_tan_farm_vehicles",
+        "อื่นๆ": "other_vehicles",
+        "คนเดินเท้า": "pedestrians",
+        "จำนวนผู้เสียชีวิต": "fatalities",
+        "จำนวนผู้บาดเจ็บสาหัส": "serious_injuries",
+        "จำนวนผู้บาดเจ็บเล็กน้อย": "minor_injuries",
+        "รวมจำนวนผู้บาดเจ็บ": "injuries_total",
+    }
+    raw = pd.read_csv(raw_path, dtype={"รหัสสายทาง": "string"},
+                      keep_default_na=False, na_values=[""], float_precision="round_trip")
+    accidents = raw[list(columns)].rename(columns=columns)
+    accidents = accidents.loc[
+        accidents["province"].eq("กรุงเทพมหานคร") & accidents["accident_year"].eq(2026)
+    ].convert_dtypes()
+    if accidents.empty:
+        raise ValueError("No 2026 Bangkok accident records in the MOT CSV")
+    accidents.insert(0, "source_row", accidents.index + 1)
+    dates = pd.to_datetime(accidents["accident_date_raw"], format="%d/%m/%Y")
+    timestamps = pd.to_datetime(
+        accidents["accident_date_raw"] + " " + accidents["accident_time_raw"],
+        format="%d/%m/%Y %H:%M",
+    )
+    if not dates.dt.year.eq(2026).all() or timestamps.isna().any():
+        raise ValueError("Missing event timestamps or Bangkok accident dates outside 2026")
+    accidents.insert(4, "accident_date", dates)
+    accidents.insert(5, "accident_at", timestamps.dt.tz_localize("Asia/Bangkok"))
+    for column, limit in [("latitude", 90), ("longitude", 180)]:
+        values = pd.to_numeric(accidents[column]).astype("Float64")
+        if not values.dropna().between(-limit, limit).all():
+            raise ValueError(f"MOT {column} outside valid bounds")
+        accidents[column] = values
+    return accidents.reset_index(drop=True)
+
+
+def clean_osm(raw_dir, camera_path):
+    cameras = pd.read_csv(camera_path, usecols=["camera_id"])
+    paths = sorted(raw_dir.glob("camera_*.json"))
+    if not paths or [p.name for p in paths] != sorted(f"camera_{i}.json" for i in cameras["camera_id"]):
+        raise ValueError("OSM response files do not match the camera metadata IDs")
+
+    motor_roads = {
+        "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified",
+        "residential", "service", "living_street", "busway",
+        "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link",
+    }
+    paths_and_walkways = {"footway", "path", "steps", "pedestrian", "cycleway", "corridor", "bridleway"}
+    tag_columns = {"name": "road_name", "highway": "highway", "lanes": "lanes",
+                   "oneway": "oneway", "maxspeed": "maxspeed", "surface": "surface"}
+    ways_by_id = {}
+    snapshots = set()
+    records = []
+    for path in paths:
+        camera_id = int(path.stem.split("_")[1])
+        response = json.loads(path.read_bytes())
+        if response.get("remark"):
+            raise ValueError(f"Incomplete Overpass response: {path.name}")
+        snapshots.add(response["osm3s"]["timestamp_osm_base"])
+        for way in response["elements"]:
+            osm_id, tags = way["id"], way["tags"]
+            if way["type"] != "way" or ways_by_id.setdefault(osm_id, way) != way:
+                raise ValueError(f"Conflicting OSM way or invalid element: {osm_id}")
+            highway = tags["highway"]
+            group = "other"
+            if highway in motor_roads:
+                group = "motor_road"
+            elif highway in paths_and_walkways:
+                group = "path"
+            record = {"camera_id": camera_id, "osm_id": osm_id}
+            record.update({column: tags.get(tag) for tag, column in tag_columns.items()})
+            record["highway_group"] = group
+            records.append(record)
+
+    table = pd.DataFrame(records).astype({c: "string" for c in [*tag_columns.values(), "highway_group"]})
+    if table.duplicated(["camera_id", "osm_id"]).any():
+        raise ValueError("Repeated camera–way pairs in the OSM responses")
+    features = []
+    for osm_id, way in sorted(ways_by_id.items()):
+        coordinates = [[point["lon"], point["lat"]] for point in way["geometry"]]
+        if len(coordinates) < 2 or any(not (-180 <= lon <= 180 and -90 <= lat <= 90)
+                                       for lon, lat in coordinates):
+            raise ValueError(f"Invalid geometry for OSM way {osm_id}")
+        features.append({
+            "type": "Feature",
+            "properties": {"osm_id": osm_id},
+            "geometry": {"type": "LineString", "coordinates": coordinates},
+        })
+    print(f"OSM source snapshot(s) in UTC: {', '.join(sorted(snapshots))}")
+    return table, {"type": "FeatureCollection", "features": features}
+
+
 def show_checks(name, table, key_columns):
     print(f"\n{name}: {len(table)} rows")
     print("First five records:")
@@ -223,6 +346,78 @@ def export_and_verify(table, csv_path, date_format=None, replace=False):
         raise ValueError(f"CSV and Parquet row counts or columns differ: {csv_path}")
     print(f"Verified CSV + Parquet: {csv_path.name}, {parquet_path.name}")
     print(f"  {len(restored)} rows; matching columns; Parquet values and dtypes preserved")
+
+
+def verify_csv_values(path, table):
+    dtypes = table.dtypes.to_dict()
+    # CSV stores timestamps as text. Restore each timestamp type for comparison.
+    for column in ("accident_date", "accident_at"):
+        dtypes.pop(column, None)
+    restored = pd.read_csv(path, dtype=dtypes, keep_default_na=False, na_values=[""],
+                           float_precision="round_trip")
+    if "accident_at" in table:
+        restored["accident_date"] = pd.to_datetime(restored["accident_date"], format="%Y-%m-%d")
+        restored["accident_at"] = pd.to_datetime(restored["accident_at"], utc=True).dt.tz_convert("Asia/Bangkok")
+    pd.testing.assert_frame_equal(restored, table, check_exact=True)
+
+
+def clean_accidents_and_osm():
+    project_dir = Path(__file__).resolve().parents[2]
+    external_dir = project_dir / "data" / "external_data"
+    raw, processed = external_dir / "raw", external_dir / "processed"
+    accidents = clean_accidents(raw / "accidents" / "accident2026.csv")
+    roads, geojson = clean_osm(raw / "osm", project_dir / "data" / "cctv_info.csv")
+    outputs = [
+        (accidents, processed / "accidents" / "bangkok_accidents_2026.csv"),
+        (roads, processed / "osm" / "camera_osm_ways.csv"),
+    ]
+    geo_path = processed / "osm" / "osm_ways.geojson"
+
+    # Check all existing outputs before creating any missing files.
+    for table, csv_path in outputs:
+        parquet_path = csv_path.with_suffix(".parquet")
+        if csv_path.exists():
+            verify_csv_values(csv_path, table)
+        if parquet_path.exists():
+            pd.testing.assert_frame_equal(pd.read_parquet(parquet_path, engine="pyarrow"),
+                                          table, check_exact=True)
+    if geo_path.exists() and json.loads(geo_path.read_bytes()) != geojson:
+        raise FileExistsError(f"Existing GeoJSON differs; refusing to overwrite: {geo_path}")
+
+    for table, csv_path in outputs:
+        export_and_verify(table, csv_path)
+        parquet = pd.read_parquet(csv_path.with_suffix(".parquet"), engine="pyarrow")
+        pd.testing.assert_frame_equal(parquet, table, check_exact=True)
+        verify_csv_values(csv_path, parquet)
+        print(f"  Verified exact CSV and Parquet values for {csv_path.stem}")
+    if not geo_path.exists():
+        with geo_path.open("x", encoding="utf-8") as file:
+            json.dump(geojson, file, separators=(",", ":"), allow_nan=False)
+    if json.loads(geo_path.read_bytes()) != geojson:
+        raise ValueError(f"GeoJSON verification failed: {geo_path}")
+
+    show_checks("Bangkok MOT accidents", accidents, ["source_row"])
+    print("Repeated source rows excluding source_row:", accidents.drop(columns="source_row").duplicated().sum())
+    location_key = ["accident_at", "latitude", "longitude"]
+    located = accidents.dropna(subset=location_key)
+    print("Repeated timestamp-and-coordinate combinations:", located.duplicated(location_key).sum())
+    dates = accidents["accident_date"]
+    print(f"Bangkok date coverage: {dates.min().date()} to {dates.max().date()}")
+    print("August 25–31, 2026 records:", dates.between("2026-08-25", "2026-08-31").sum())
+    print("Bangkok coordinates (decimal degrees):")
+    print(accidents[["latitude", "longitude"]].agg(["min", "max"]).to_string())
+
+    show_checks("Camera–OSM way pairs", roads, ["camera_id", "osm_id"])
+    print(f"Cameras represented: {roads['camera_id'].nunique()}")
+    features = geojson["features"]
+    longitudes, latitudes = zip(*(point for feature in features for point in feature["geometry"]["coordinates"]))
+    print(f"Verified {len(features)} GeoJSON LineStrings with unique integer osm_id values")
+    print(f"OSM geometry bounds (west, south, east, north): "
+          f"{min(longitudes)}, {min(latitudes)}, {max(longitudes)}, {max(latitudes)}")
+    print("First five geometries (osm_id, first [longitude, latitude], point count):")
+    for feature in features[:5]:
+        coordinates = feature["geometry"]["coordinates"]
+        print(feature["properties"]["osm_id"], coordinates[0], len(coordinates))
 
 
 def main(replace_weather=False):
@@ -304,8 +499,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Clean external datasets without changing raw files")
     parser.add_argument("--replace-weather", action="store_true",
                         help="Explicitly allow replacement of weather_clean.csv and weather_clean.parquet only")
+    parser.add_argument("--accidents-osm", action="store_true",
+                        help="Clean and verify only MOT accidents and OpenStreetMap")
     args = parser.parse_args()
     try:
-        main(replace_weather=args.replace_weather)
+        if args.accidents_osm:
+            clean_accidents_and_osm()
+        else:
+            main(replace_weather=args.replace_weather)
     except (ValueError, KeyError, OSError, ImportError, AssertionError) as error:
         raise SystemExit(f"External data cleaning failed: {error}")

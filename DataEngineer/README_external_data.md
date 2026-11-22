@@ -1,14 +1,9 @@
 # Bangkok CCTV External Data
 
 The collection scripts cover Open-Meteo weather, Thailand public holidays,
-and BEM traffic volume. They use simple functions, Requests, and Pandas.
-CCTV images and vehicle detection are outside this work's scope.
-
-The current project contains no OpenStreetMap collector or OSM dataset files.
-If OSM collection is restored later, use `data/external_data/raw/osm/` for
-original responses and keep any processed data separate. A current OSM download
-represents the map snapshot at collection time, not the historical road network
-from August 2026.
+BEM traffic volume, MOT road accidents, and OpenStreetMap road geometry.
+They use simple functions, Requests, and Pandas. CCTV images and vehicle
+detection are outside this work's scope.
 
 ## Folder structure
 
@@ -22,19 +17,25 @@ data/
       weather/       # Original weather JSON
       holidays/      # Original holiday JSON
       bem/           # Original HTML and extracted raw table CSV
+      accidents/     # Original MOT accident CSV
+      osm/           # Original Overpass JSON per camera
     processed/
       weather/       # Hourly table CSV
-      holidays/      # Empty; no cleaning performed
-      bem/           # Empty; no cleaning performed
+      holidays/      # 2026 calendar
+      bem/           # Monthly and published annual traffic tables
+      accidents/     # 2026 Bangkok accidents in CSV and Parquet
+      osm/           # Camera–way tables and way geometry
 DataEngineer/
   external_data_collector/
-    collect_data.py
+    collect_weather.py
     collect_holidays.py
     collect_bem.py
+    collect_accidents.py
+    collect_osm.py
   requirements.txt
   README_external_data.md
   bronze_data/       # Existing work, unchanged
-  clean_process/     # Existing work, unchanged
+  clean_process/
   pipeline/          # Existing work, unchanged
 ```
 
@@ -48,17 +49,17 @@ From the repository root:
 
 ```powershell
 python -m pip install -r DataEngineer/requirements.txt
-python DataEngineer/external_data_collector/collect_data.py
+python DataEngineer/external_data_collector/collect_weather.py
 python DataEngineer/external_data_collector/collect_holidays.py
 python DataEngineer/external_data_collector/collect_bem.py
 ```
 
 Alternatively, from `DataEngineer/`, run
-`python external_data_collector/collect_data.py`,
+`python external_data_collector/collect_weather.py`,
 `python external_data_collector/collect_holidays.py`, or
 `python external_data_collector/collect_bem.py`.
-Dependencies are `requests`, `pandas`, and `lxml`; Pandas uses `lxml` to read
-the BEM HTML table. No BeautifulSoup dependency is needed.
+Pandas uses `lxml` to read the BEM HTML table and `pyarrow` to read and write
+Parquet.
 
 Each script uses `Path(__file__).resolve().parent.parent.parent` to find the repository
 root. Output paths therefore work independently of the current working folder.
@@ -135,7 +136,7 @@ The original default weather example above uses Best Match, not explicit ERA5.
 Its files are retained separately. The approved two-grid ERA5 collection uses:
 
 ```powershell
-python DataEngineer/external_data_collector/collect_data.py --era5-grids
+python DataEngineer/external_data_collector/collect_weather.py --era5-grids
 ```
 
 The function makes one hourly request per grid, sequentially, with a one-second
@@ -235,8 +236,8 @@ https://raw.githubusercontent.com/ppraserts/thailand-open-data/main/data/thai-pu
 It saves the original response as
 `data/external_data/raw/holidays/thailand_public_holidays_2026.json`.
 `pd.DataFrame(data["holidays"])` creates an in-memory table and displays its
-columns and first five records. It retains all 2026 holidays and missing values;
-no cleaning or processed holiday file is created.
+columns and first five records. The default cleaner writes the separate
+`thailand_calendar_2026.csv` and `.parquet` files.
 
 ## BEM traffic volume
 
@@ -252,5 +253,71 @@ The table measures **Average Traffic Volume per Day**, in **Thousand Trips**.
 It retains all available year rows, the 12 monthly columns, and the separate
 average column. Values remain text to preserve commas, decimal places, and
 blank cells. Buddhist Era years and Thai column names remain unchanged.
-BEM is a separate monthly dataset and is never expanded into hourly weather
-records. No processed BEM file is created.
+BEM is a separate monthly dataset. The default cleaner writes monthly and
+published annual average tables in CSV and Parquet.
+
+## MOT accidents and OpenStreetMap cleaning
+
+Run from the repository root:
+
+```powershell
+python DataEngineer/clean_process/clean_external_data.py --accidents-osm
+```
+
+This command reads the saved raw files and writes the accidents and OSM outputs
+listed below. Reruns verify matching outputs and stop if an existing file
+differs. The console reports column names, dtypes, missing values, duplicate
+counts, coverage, and samples. It verifies CSV and PyArrow Parquet values after
+reading them back.
+
+### MOT road accidents
+
+The [MOT Road Accident dataset](https://datagov.mot.go.th/th/dataset/roadaccident)
+covers motorways and highways, rural roads, and expressways in the Ministry's
+road network. The raw file is `raw/accidents/accident2026.csv` relative to
+`data/external_data/`. The cleaner writes
+`processed/accidents/bangkok_accidents_2026.csv` and `.parquet`.
+
+| Columns | Meaning and units |
+| --- | --- |
+| `source_row` | One-based record number in this raw CSV, excluding the header |
+| `accident_year`, `province` | Source Gregorian year and Thai province name |
+| `accident_date_raw`, `accident_time_raw`, `report_date_raw`, `report_time_raw` | Original date and time text |
+| `accident_date`, `accident_at` | Local event date and timestamp in Asia/Bangkok. CSV stores the timestamp with its UTC+07:00 offset. Parquet retains the timezone name. |
+| `latitude`, `longitude`, `kilometer_marker` | Coordinates in decimal degrees and the reported kilometer marker in kilometers |
+| `agency`, `road_network`, `route_code`, `road_name` | Original road authority and route identifiers. Route codes are text. |
+| `road_layout`, `other_location_detail`, `suspected_cause`, `accident_type`, `weather` | Original source descriptions |
+| `first_vehicle_type`, `vehicles_total`, `participants_total`, vehicle-category columns, `pedestrians` | First vehicle label and source counts by category, including pedestrian counts |
+| `fatalities`, `serious_injuries`, `minor_injuries`, `injuries_total` | Source counts of people |
+
+The Bangkok table contains all 2,228 records available in the source for
+January 1 through October 31, 2026, including 53 during August 25–31.
+Missing coordinates and repeated source records are preserved. `source_row`
+identifies a row in this file version. Repeated event timestamps and coordinates
+are flagged in validation as possible duplicates. Future spatial matching can
+use `latitude` and `longitude` when both exist, alongside `accident_at` for time
+alignment.
+
+### OpenStreetMap
+
+The inputs are Overpass JSON files in `raw/osm/camera_<id>.json`, collected
+through the [Dresel Asia Overpass mirror](https://ovp.dresel.systems/) using
+300-meter camera searches. The OSM snapshot is from November 22, 2026 Bangkok
+time. The August 2026 road network may differ.
+
+- `processed/osm/camera_osm_ways.csv` and `.parquet` contain one row per
+  `camera_id, osm_id`. `road_name`, `highway`, `lanes`, `oneway`, `maxspeed`,
+  and `surface` preserve the source tag text and missing values. `lanes` is the
+  tagged lane count. `maxspeed` keeps the tagged speed text, including unit
+  suffixes where present.
+- `highway_group` groups common motor-road tags, path and walkway tags, and
+  other values. It describes the mapped highway class. Legal access and
+  camera visibility require separate checks.
+- `processed/osm/osm_ways.geojson` stores one full LineString per `osm_id`.
+  Coordinate pairs are `[longitude, latitude]` in decimal degrees. Full ways
+  can extend beyond the 300-meter radius.
+
+Use `osm_id` to look up geometry and `camera_id` to look up camera metadata.
+The camera–way key describes which searches returned each way. The road visible
+in each camera remains unverified. Data © OpenStreetMap contributors under the
+[Open Database License](https://www.openstreetmap.org/copyright).
