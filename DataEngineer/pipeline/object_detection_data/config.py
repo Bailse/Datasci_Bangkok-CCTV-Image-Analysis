@@ -10,8 +10,11 @@ GOLD_PATH       = REPO_ROOT / "data/gold/image_counts.parquet"
 
 
 # --- YOLO (silver) ---
-MODEL_WEIGHTS = "yolo11x.pt"   # tuned (DataSci/model_eval): was yolo11s.pt
-CONF = 0.075                   # tuned: was 0.25
+# fine-tuned on 597 labelled Bangkok CCTV images (DataSci/model_eval/06_train_finetune.py, best epoch 14).
+# On the 100 hand-counted images: total MAE 2.21 vs 2.82 for yolo11x @ conf 0.075.
+# *.pt is gitignored: share this file with the team separately (or copy finetune/runs/yolo11m_ft/weights/best.pt here).
+MODEL_WEIGHTS = str(ROOT / "models/yolo11m_finetune.pt")   # was yolo11x.pt (before that yolo11s.pt)
+CONF = 0.1                     # best of 0.1-0.4 for the fine-tuned model (was 0.075 for yolo11x)
 IMGSZ = 640                    
 BATCH = 16
 IOU = 0.5                      # tuned: NMS overlap threshold (YOLO default 0.7)

@@ -1,4 +1,4 @@
-raw_data/cctv_images
+raw_data/
 data/bronze_data
 data/gold
 data/silver_data
@@ -8,7 +8,10 @@ __pycache__/
 Bombaclat/
 
 *.pt
+!DataEngineer/pipeline/object_detection_data/models/*.pt
+
 DataSci/model_eval/_to_delete/
-DataSci/model_eval/predictions/
 DataSci/model_eval/count_set/images/
 DataSci/model_eval/comparison/**/*.jpg
+DataSci/model_eval/finetune/*
+!DataSci/model_eval/finetune/selection.csv

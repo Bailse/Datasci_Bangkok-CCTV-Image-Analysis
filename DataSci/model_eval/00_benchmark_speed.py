@@ -1,8 +1,8 @@
-"""Step 4: measure how fast each YOLO size runs on THIS machine, and estimate the full silver run.
+"""Measure how fast each YOLO size runs on THIS machine, and estimate the full silver run.
 
 Run from the repo root:
-    python DataSci/model_eval/04_benchmark_speed.py
-    python DataSci/model_eval/04_benchmark_speed.py --models yolo11s.pt yolo11x.pt --n-images 300
+    python DataSci/model_eval/00_benchmark_speed.py
+    python DataSci/model_eval/00_benchmark_speed.py --models yolo11s.pt yolo11x.pt --n-images 300
 
 It does not write anything into data/ and does not touch the silver pipeline.
 Timing mimics silver: read image from disk -> predict in batches of 16.

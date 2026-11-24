@@ -8,7 +8,8 @@ import cv2
 import numpy as np
 
 COLORS = {"car": (0, 200, 255), "motorcycle": (0, 220, 0), "bus": (255, 0, 255),
-          "truck": (255, 128, 0), "person": (60, 60, 255), "bicycle": (200, 200, 0)}
+          "truck": (255, 128, 0), "person": (60, 60, 255), "bicycle": (200, 200, 0),
+          "heavy": (255, 0, 255)}
 
 
 def draw_detections(img, boxes, names, confs, scale=3):

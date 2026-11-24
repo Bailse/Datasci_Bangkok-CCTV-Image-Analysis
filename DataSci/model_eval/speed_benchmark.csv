@@ -1,4 +1,4 @@
-model,ms_per_img_total,ms_read,ms_predict,img_per_sec,full_run_hours,full_run_minutes,peak_vram_gb
+model,ms_per_img_total,ms_read,ms_predict,img_per_sec,full_run_hours (61k imgs),full_run_minutes (61k imgs),peak_vram_gb
 yolo11s,7.4,1.1,6.3,134.9,0.13,8,1.03
 yolo11m,13.4,0.4,13.0,74.4,0.23,14,1.49
 yolo11l,16.1,0.4,15.7,62.2,0.27,16,1.79

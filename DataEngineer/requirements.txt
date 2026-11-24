@@ -2,3 +2,8 @@ requests
 pandas
 lxml
 pyarrow
+
+prefect
+ultralytics
+opencv-python
+imagesize

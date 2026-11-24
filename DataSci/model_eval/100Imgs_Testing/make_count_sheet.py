@@ -1,7 +1,7 @@
-"""Step 2: build a small ground-truth set by counting vehicles by hand (no box drawing).
+"""Build a small ground-truth set by counting vehicles by hand (no box drawing).
 
 Run from the repo root:
-    python DataSci/model_eval/02_make_count_sheet.py
+    python DataSci/model_eval/100Imgs_Testing/make_count_sheet.py
 
 Output:
     DataSci/model_eval/count_set/images/*.jpg   100 clean images (1 per camera, ~50% night)
@@ -16,10 +16,11 @@ from pathlib import Path
 
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+MODEL_EVAL = Path(__file__).resolve().parents[1]      # DataSci/model_eval (this file is in 100Imgs_Testing/)
+REPO_ROOT = Path(__file__).resolve().parents[3]
 IMAGE_ROOT = REPO_ROOT / "raw_data/cctv_images"
 MANIFEST = REPO_ROOT / "data/bronze_data/manifest.parquet"
-OUT_DIR = Path(__file__).resolve().parent / "count_set"
+OUT_DIR = MODEL_EVAL / "count_set"
 
 MIN_FILE_BYTES = 2000                         # skip blank "no signal" frames
 NIGHT_HOURS = set(range(19, 24)) | set(range(0, 6))
