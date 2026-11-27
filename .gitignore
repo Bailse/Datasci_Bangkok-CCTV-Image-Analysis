@@ -5,6 +5,7 @@ data/silver_data
 test/*
 .vscode/*
 __pycache__/
+DataSci/analysis/outputs/cctv_20261128/
 Bombaclat/
 
 *.pt
