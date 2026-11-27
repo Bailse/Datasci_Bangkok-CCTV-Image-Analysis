@@ -95,7 +95,7 @@ box. Some misses and false boxes can cancel out in the count.
 | Setting | What it does |
 |---|---|
 | `GOLD_GROUPS` | Maps silver classes to gold columns. Now: `car` = car, `motor` = motorcycle. bus/truck/person/bicycle are in silver but not used in gold yet. Pickups are labelled `truck`, so if a heavy-vehicle column is wanted: `"car": ["car", "truck"], "heavy": ["bus"]` |
-| `NIGHT_BRIGHTNESS_THRESHOLD` | Images with mean brightness (0-255) below this are labeled `night` in gold's `day_night` column. 70 was set by eye and has not been validated |
+| `NIGHT_START_HOUR`, `NIGHT_END_HOUR` | Gold's `day_night` column comes from the Bangkok hour of `ts_filename`: 20:00-05:59 = `night`. It used to be mean brightness < 70, but street lights keep 19-21h images at ~95 brightness, so only 403 of 61,319 images were `night` |
 
 ## Files
 
@@ -122,7 +122,8 @@ All scripts run from the repo root, e.g. `python DataSci/model_eval/02_train_fin
 | `comparison/charts/*.png` | Slide charts | yes |
 | `comparison/side_by_side/`, `comparison/<model>/` | Images with boxes drawn, all models next to each other | no |
 | `tuning_history/round2/` | Stage 1 tuning results (all settings tried) | yes |
-| `finetune/selection.csv` | Which images were sent to Roboflow and why | yes |
+| `finetune/selection.csv` | Which images were sent to Roboflow and why (round 1, 600 images) | yes |
+| `finetune/selection_round2.csv` | Round 2 picks (100 images): time group, reason, predicted vehicles, unsure boxes | yes |
 | `finetune/` (everything else) | Roboflow upload/export, training dataset, training runs (`runs/yolo11m_ft/`) | no |
 | `speed_benchmark.csv` | Speed results on RTX 4060 | yes |
 
@@ -165,3 +166,22 @@ rider = `person` + `motorcycle`). `count_set/RULES.txt` is only for the hand cou
 7. **Use it in silver** only if it beats the current model: copy `best.pt` to
    `DataEngineer/pipeline/object_detection_data/models/`, point `MODEL_WEIGHTS` at it, set `CONF` to the best
    conf from step 6, update the `yolo11m_finetune` entry in `compare_configs.py`, then re-run silver and gold.
+
+### Round 2: 100 more images aimed at the weak spots
+
+On the test set the fine-tuned model is worst on **busy night scenes** (16+ vehicles: MAE 4.8, misses ~4
+vehicles per image) and round 1 had only 24 such images. Its errors are mostly missed vehicles.
+
+1. **Pick + pre-label** (~5 min): `python DataSci/model_eval/01b_pick_more_images.py`
+   -> `finetune/roboflow_upload_round2.zip` and `finetune/selection_round2.csv`.
+   Default mix: night 50, dusk 15, busy day with motorcycles 25, most-unsure anywhere 10 (change with
+   `--night --dusk --day --hard`). Never picks a test or round-1 image or anything within 30 min of one
+   (same camera), and keeps new picks of one camera at least 30 min apart. `--max-per-cam 1` spreads the
+   picks over more cameras (default 2: busy cameras get two).
+2. **Upload into the SAME Roboflow project** as round 1, fix the boxes as before (same `LABELING_RULES.md`),
+   then generate a NEW version containing all images (round 1 + round 2) and export it.
+3. **Train** with a new run name so round 1's results are kept:
+   `python DataSci/model_eval/02_train_finetune.py --export <new export.zip> --name yolo11m_ft_r2`
+4. **Evaluate** against the current model (same 100 test images, so the numbers are directly comparable to 2.21):
+   `python DataSci/model_eval/100Imgs_Testing/compare_configs.py --configs yolo11m_finetune --extra-model DataSci/model_eval/finetune/runs/yolo11m_ft_r2/weights/best.pt`
+   Look at night `total_mae` first. Switch silver to it only if it is better (step 7 above).

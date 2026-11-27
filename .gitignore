@@ -15,3 +15,4 @@ DataSci/model_eval/count_set/images/
 DataSci/model_eval/comparison/**/*.jpg
 DataSci/model_eval/finetune/*
 !DataSci/model_eval/finetune/selection.csv
+!DataSci/model_eval/finetune/selection_round2.csv

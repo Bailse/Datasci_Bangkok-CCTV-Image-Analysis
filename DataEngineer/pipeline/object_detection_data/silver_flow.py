@@ -47,8 +47,9 @@ def build_gold() -> int:
 
     for out_col, src_cols in cfg.GOLD_GROUPS.items():
         ok[out_col] = ok[src_cols].sum(axis=1).astype(int)
-    ok["day_night"] = (ok.brightness >= cfg.NIGHT_BRIGHTNESS_THRESHOLD
-                       ).map({True: "day", False: "night"})
+    hour = pd.to_datetime(ok.ts_filename).dt.tz_convert("Asia/Bangkok").dt.hour
+    is_night = (hour >= cfg.NIGHT_START_HOUR) | (hour < cfg.NIGHT_END_HOUR)
+    ok["day_night"] = is_night.map({True: "night", False: "day"})
 
     gold = ok[["camera_id", "ts_filename", "filename", *cfg.GOLD_GROUPS, "day_night"]]
     cfg.GOLD_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -24,7 +24,14 @@ TRACKED = {"person": 0, "bicycle": 1, "car": 2, "motorcycle": 3, "bus": 5, "truc
 
 # --- Gold rules (cheap to change, no YOLO rerun) ---
 GOLD_GROUPS = {
-    "car":   ["car"],            
-    "motor": ["motorcycle"],
+    "car":     ["car"],
+    "motor":   ["motorcycle"],   # name kept as "motor": DataSci/analysis and Visualization read it
+    "truck":   ["truck"],        # includes pickups (LABELING_RULES.md labels pickups as truck)
+    "bus":     ["bus"],
+    "bicycle": ["bicycle"],
+    "person":  ["person"],       # riders on motorcycles are counted here too
 }
-NIGHT_BRIGHTNESS_THRESHOLD = 70  # mean gray (0-255); tune by looking at samples
+# day_night from the local (Bangkok) hour of ts_filename: night = 20:00-05:59.
+# Was brightness < 70, but street lights keep 19-21h images at ~95 brightness, so only 403 images were "night".
+NIGHT_START_HOUR = 20
+NIGHT_END_HOUR = 6
