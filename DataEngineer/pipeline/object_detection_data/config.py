@@ -22,6 +22,12 @@ IOU = 0.5                      # tuned: NMS overlap threshold (YOLO default 0.7)
 # COCO class ids we store in silver (can adjust))
 TRACKED = {"person": 0, "bicycle": 1, "car": 2, "motorcycle": 3, "bus": 5, "truck": 7}
 
+# --- Bad frames (quality.py; re-apply without YOLO: python silver_flow.py --reflag) ---
+# Measured on all 61,319 images: stuck copies differ from the previous image by <= 0.02,
+# real images by >= 0.93 (mean abs gray difference, 0-255, at 64x48). Real images are >= 7 KB.
+NO_SIGNAL_MAX_BYTES = 2048     # smaller files are "no signal" placeholders (504 images)
+FROZEN_MAX_DIFF = 0.5          # below this the image is a copy of the previous one (580 images)
+
 # --- Gold rules (cheap to change, no YOLO rerun) ---
 GOLD_GROUPS = {
     "car":     ["car"],

@@ -97,6 +97,19 @@ box. Some misses and false boxes can cancel out in the count.
 | `GOLD_GROUPS` | Maps silver classes to gold columns. Now: `car` = car, `motor` = motorcycle. bus/truck/person/bicycle are in silver but not used in gold yet. Pickups are labelled `truck`, so if a heavy-vehicle column is wanted: `"car": ["car", "truck"], "heavy": ["bus"]` |
 | `NIGHT_START_HOUR`, `NIGHT_END_HOUR` | Gold's `day_night` column comes from the Bangkok hour of `ts_filename`: 20:00-05:59 = `night`. It used to be mean brightness < 70, but street lights keep 19-21h images at ~95 brightness, so only 403 of 61,319 images were `night` |
 
+#### Bad frames - `quality.py`, re-apply without YOLO (`python silver_flow.py --reflag`)
+Some cameras send broken images that still get a new filename/timestamp. Silver keeps them with a
+`status`, and gold only keeps `status == "ok"` (60,230 of 61,319 images).
+
+| Status | Setting | Meaning | Count |
+|---|---|---|---|
+| `no_signal` | `NO_SIGNAL_MAX_BYTES = 2048` | "No signal" placeholder images (real images are >= 7 KB) | 504 |
+| `frozen` | `FROZEN_MAX_DIFF = 0.5` | Feed is stuck: image is a copy of the previous real image (no-signal images in between are skipped). The first image of a stuck run stays `ok` | 585, 21 cameras (most: 150, 938, 206, 939, 395; 938 and 939 freeze at the same minutes) |
+
+`frame_diff` = mean absolute gray difference (0-255) from the previous image of the same camera, at 64x48.
+Stuck copies are <= 0.02, real images >= 0.93, so the threshold is not sensitive. Silver also stores
+`file_bytes` and `frame_diff` for checking.
+
 ## Files
 
 All scripts run from the repo root, e.g. `python DataSci/model_eval/02_train_finetune.py --help`.
